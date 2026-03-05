@@ -294,5 +294,26 @@ if __name__ == "__main__":
     print("✅ Keys loaded successfully from .env!")
     print(f"🔑 API Key: {STUMBLE_KEY[:5]}...{STUMBLE_KEY[-5:]}")
     
-    bot.run(DISCORD_TOKEN)
+
+#below code for web deploy
+from flask import Flask
+from threading import Thread
+import os
+
+app = Flask('')
+
+@app.route('/')
+@app.route('/health')
+def home():
+    return "Bot is running!"
+
+def run_web():
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+
+
+Thread(target=run_web, daemon=True).start()
+
+
+bot.run(DISCORD_TOKEN)
+
     
