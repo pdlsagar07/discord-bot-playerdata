@@ -9,9 +9,7 @@ from typing import Optional, Dict
 import os
 from dotenv import load_dotenv
 
-
 load_dotenv()
-
 
 STUMBLE_KEY = os.getenv("STUMBLE_KEY")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -46,6 +44,44 @@ class StumbleLabsAPI:
         except Exception as e:
             print(f"API Error: {e}")
             return None
+    #not sure if this ranked system works: 
+def get_rank_info(rank_id: int) -> str:
+    """Get rank name from rank_id"""
+    rank_mapping = {
+        0: "Wood I",
+        1: "Wood II",
+        2: "Wood III",
+        3: "Bronze I",
+        4: "Bronze II",
+        5: "Bronze III",
+        6: "Silver I",
+        7: "Silver II",
+        8: "Silver III",
+        9: "Gold I",
+        10: "Gold II",
+        11: "Gold III",
+        12: "Platinum I",
+        13: "Platinum II",
+        14: "Platinum III",
+        15: "Master I",
+        16: "Master II",
+        17: "Master III",
+        18: "Champion I",
+        19: "Champion II",
+        20: "Champion III"
+    }
+    
+    return rank_mapping.get(rank_id, "Unknown")
+
+def format_season(season_str: str) -> str:
+    """Convert 'LIVE_RANKED_SEASON_19' to 'S19'"""
+    if season_str and "SEASON_" in season_str:
+        try:
+            season_num = season_str.split("SEASON_")[-1]
+            return f"S{season_num}"
+        except:
+            return season_str
+    return season_str
 
 # Create bot instance
 class StumbleBot(discord.Client):
@@ -58,7 +94,6 @@ class StumbleBot(discord.Client):
 
 bot = StumbleBot()
 
-#COMMAND 1: /username -
 @bot.tree.command(name="username", description="Get complete Stumble Guys player data")
 @app_commands.describe(username="The Stumble Guys username to search for")
 @app_commands.guild_only()
@@ -81,7 +116,7 @@ async def username_command(interaction: discord.Interaction, username: str):
             await interaction.followup.send(embed=embed)
             return
         
-        embed = await create_full_player_embed(player, f"Username: {username}")
+        embed = await create_player_embed(player, username, interaction)
         await interaction.followup.send(embed=embed)
 
 #COMMAND 2: /usernamehistory - Shows ONLY username history 
@@ -109,80 +144,158 @@ async def usernamehistory_command(interaction: discord.Interaction, username: st
         
         embed = await create_history_embed(player)
         await interaction.followup.send(embed=embed)
-
-
-async def create_full_player_embed(player: Dict, search_info: str = None) -> discord.Embed:
-    """Create embed with player data"""
+ 
+async def create_player_embed(player: Dict, searched_username: str, interaction: discord.Interaction) -> discord.Embed:
+    """Create embed with L-shaped symbols and gray opacity effect"""
+    
+    player_name = player.get('userName', searched_username)
     
     embed = discord.Embed(
-        title=f"🎮 {player.get('userName', 'Unknown')}",
+        title=f"**Sagar's Search Api**",
         color=discord.Color.blue()
     )
     
-    if search_info:
-        embed.description = f"*{search_info}*"
+    # Skin image as thumbnail
+    if player.get('skinInformation') and player['skinInformation'].get('IconUrl'):
+        embed.set_thumbnail(url=player['skinInformation']['IconUrl'])
     
-    # stumbledata
+    description = []
+    
+    # Header with gray opacity using code block
+    
+    # ID with L-shape (using code block for gray effect)
+    user_id = player.get('userId', 'N/A')
+     
+    description.append(f"*ID*")
+    description.append(f" └─ {user_id}")
+     
+      
+    
+    # Username with L-shape
+     
+    description.append(f"*Username*")
+    description.append(f"  └─ {player_name}")
+     
+      
+    
+    # Country with flag
+    country = player.get('country', 'Unknown')
+    flag_map = {
+        'US': '🇺🇸', 'GB': '🇬🇧', 'NP': '🇳🇵', 'IN': '🇮🇳',
+        'BR': '🇧🇷', 'DE': '🇩🇪', 'FR': '🇫🇷', 'JP': '🇯🇵',
+        'KR': '🇰🇷', 'CN': '🇨🇳', 'RU': '🇷🇺', 'CA': '🇨🇦',
+        'AU': '🇦🇺', 'MX': '🇲🇽', 'ES': '🇪🇸', 'IT': '🇮🇹'
+    }
+    flag = flag_map.get(country, '🌐')
+     
+    description.append(f"*Country*")
+    description.append(f"  └─ {flag}")
+     
+      
+    
+    # Trophies
     trophies = player.get('trophies', 0)
+     
+    description.append(f"*Trophies*")
+    description.append(f"  └─ {trophies:,} 🏅")
+     
+      
+    
+    # Crowns
     crowns = player.get('crowns', 0)
+     
+    description.append(f"*crowns*")
+    description.append(f"  └─ {crowns:,} 🏆")
+     
+      
     
-    embed.add_field(name="🏆 Trophies", value=f"**{trophies:,}**", inline=True)
-    embed.add_field(name="👑 Crowns", value=f"**{crowns:,}**", inline=True)
-    embed.add_field(name="🌍 Country", value=f"**{player.get('country', 'Unknown')}**", inline=True)
+    # Skin
+    if player.get('skinInformation'):
+        skin = player['skinInformation'].get('FriendlyName', 'Unknown')
+    else:
+        skin = player.get('skin', 'Unknown')
+     
+    description.append(f"*Skin*")
+    description.append(f"  └─ {skin}")
+     
+      
     
-    # Status
-    status = "🟢 Online" if player.get('isOnline') else "🔴 Offline"
-    embed.add_field(name="Status", value=status, inline=True)
+    # Experience and Level
+    exp = player.get('experience', 0)
+    description.append(f"*Experience*")
+    description.append(f"  └─{exp:,} ")
+     
+      
     
-    # Platform
-    platform = player.get('nativePlatformName', 'Unknown').title()
-    embed.add_field(name="📱 Platform", value=f"**{platform}**", inline=True)
+    # Online status
+    status = ":green_circle:" if player.get('isOnline') else ":red_circle:"
+     
+    description.append(f"*Online*")
+    description.append(f"  └─ {status}")
+     
+      
     
-    # Level
-    if player.get('xpRoadInfo'):
-        level = player['xpRoadInfo'].get('level', 0)
-        embed.add_field(name="⭐ Level", value=f"**{level}**", inline=True)
+    # Rank info
+    if player.get('ranked'):
+        rank = player['ranked']
+        rank_id = rank.get('currentRankId', 0)
+        season = format_season(rank.get('currentSeasonId', 'Unknown'))
+        rank_name = get_rank_info(rank_id)
+         
+        description.append(f"*Rank*")
+        description.append(f"  └─ {rank_name} ({season})")
+         
+          
     
-    # Clan
+    # Clan if exists
     if player.get('clan'):
         clan = player['clan']
-        embed.add_field(
-            name="👥 Clan",
-            value=f"**{clan.get('name', 'Unknown')}** [{clan.get('tag', '???')}]",
-            inline=False
-        )
+        clan_name = clan.get('name', 'Unknown')
+        clan_tag = clan.get('tag', '???')
+         
+        description.append(f"*Clan*")
+        description.append(f"    └─ {clan_name} [{clan_tag}]")
+         
+          
     
-    # username history (<5)
+    embed.description = "\n".join(description)
+    
+    # Username history with L-shapes and gray opacity
     if player.get('usernameHistory') and len(player['usernameHistory']) > 1:
         history = player.get('usernameHistory', [])
         recent_history = history[-5:] if len(history) > 5 else history
         current_name = player.get('userName', '')
         
-        history_text = ""
-        for name in recent_history:
+        history_lines = []
+        
+        history_lines.append(f"*Username History*")
+        
+        for i, name in enumerate(recent_history, 1):
             if name == current_name:
-                history_text += f"• **{name}** (current)\n"
+                if i == len(recent_history):
+                    history_lines.append(f"    └─  {name} (current)")
+                else:
+                    history_lines.append(f"    └─  {name} (current)")
             else:
-                history_text += f"• {name}\n"
+                if i == len(recent_history):
+                    history_lines.append(f"    └─  {name}")
+                else:
+                    history_lines.append(f"    └─  {name}")
+        
+        if len(history) > 5:
+            history_lines.append(f"... and more")
+        
+        
         
         embed.add_field(
-            name=f"📝 Recent Usernames (last {len(recent_history)} of {len(history)})", 
-            value=history_text, 
+            name="", 
+            value="\n".join(history_lines), 
             inline=False
         )
     
-    # Skin image
-    if player.get('skinInformation') and player['skinInformation'].get('IconUrl'):
-        embed.set_thumbnail(url=player['skinInformation']['IconUrl'])
-    
-    # User ID
-    embed.add_field(name="🆔 User ID", value=f"`{player.get('userId', 'N/A')}`", inline=False)
-    
-    embed.set_footer(text="- made by sagar")
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     return embed
-
-# EMBED 2: ONLY USERNAME HISTORY
 async def create_history_embed(player: Dict) -> discord.Embed:
     """Create embed with ONLY username history (shows as many as possible)"""
     
@@ -237,7 +350,7 @@ async def create_history_embed(player: Dict) -> discord.Embed:
         else:
             history_text += line
     
-    # Add the last chunk
+    # last chunk
     if history_text:
         embed.add_field(
             name=f"Name History (Part {chunk_count})", 
@@ -245,7 +358,7 @@ async def create_history_embed(player: Dict) -> discord.Embed:
             inline=False
         )
     
-    # Add stats
+    # stats
     unique_names = len(set(history))
     if unique_names < len(history):
         embed.add_field(
@@ -258,62 +371,36 @@ async def create_history_embed(player: Dict) -> discord.Embed:
     
     return embed
 
+
 @bot.event
 async def on_ready():
     print(f"🎮 {bot.user} is ready!")
     print(f"🌐 Connected to {len(bot.guilds)} servers")
     
-    # Force sync commands
     await bot.tree.sync()
     print("✅ Commands synced!")
     
-    # List commands
     commands = await bot.tree.fetch_commands()
     command_names = [cmd.name for cmd in commands]
     print(f"📋 Registered commands: {command_names}")
     
-    # Set status
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
-            name="playing StumbleGuys"
+            name="Stumble Guys"
         )
     )
 
 if __name__ == "__main__":
-
     if not STUMBLE_KEY or STUMBLE_KEY == "your_actual_key_here" or len(STUMBLE_KEY) < 10:
-        print("❌  key not found in .env file!")
+        print("❌ key not found in .env file!")
         exit(1)
     
     if not DISCORD_TOKEN or DISCORD_TOKEN == "your_actual_token_here" or len(DISCORD_TOKEN) < 20:
         print("❌ token not found .env file!")
-       
         exit(1)
     
     print("✅ Keys loaded successfully from .env!")
     print(f"🔑 API Key: {STUMBLE_KEY[:5]}...{STUMBLE_KEY[-5:]}")
     
-
-#below code for web deploy
-from flask import Flask
-from threading import Thread
-import os
-
-app = Flask('')
-
-@app.route('/')
-@app.route('/health')
-def home():
-    return "Bot is running!"
-
-def run_web():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
-
-
-Thread(target=run_web, daemon=True).start()
-
-
-bot.run(DISCORD_TOKEN)
-
-    
+    bot.run(DISCORD_TOKEN)
