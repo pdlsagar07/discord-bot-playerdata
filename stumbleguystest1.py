@@ -7,6 +7,7 @@ import requests
 from datetime import datetime
 from typing import Optional, Dict
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,25 +26,50 @@ class StumbleLabsAPI:
             'Content-Type': 'application/json'
         })
     
-    def search_by_username(self, username: str) -> Optional[Dict]:
-        """Search for a player by username"""
+    def search_by_username(self, username: str, retry_count: int = 2) -> Optional[Dict]:
+        """Search for a player by username with retry logic"""
+       
+        original_username = username
         username = username.strip('"\' ').replace('"', '').replace("'", "")
         
-        try:
-            response = self.session.post(
-                f"{self.base_url}/users/search",
-                json={"username": username}
-            )
+        # Try different variations if needed
+        search_attempts = [
+            username,  
+            username.lower(),  # Lowercase
+            username.title(),  # Title case
+            username.upper(),  # Uppercase
+            username.replace(" ", ""),  # No spaces
+        ]
+        
+        # Remove duplicates 
+        seen = set()
+        search_attempts = [x for x in search_attempts if not (x in seen or seen.add(x))]
+        
+        for attempt_num in range(retry_count + 1):
+            for attempt_username in search_attempts:
+                try:
+                    response = self.session.post(
+                        f"{self.base_url}/users/search",
+                        json={"username": attempt_username},
+                        timeout=10
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get('success') and data.get('data'):
+                            return data.get('data')
+                    
+                    elif response.status_code == 429:
+                        time.sleep(2)
+                    
+                except:
+                    pass
             
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('success'):
-                    return data.get('data')
-            return None
-            
-        except Exception as e:
-            print(f"API Error: {e}")
-            return None
+            if attempt_num < retry_count:
+                time.sleep(1)
+        
+        return None
+    
     #not sure if this ranked system works: 
 def get_rank_info(rank_id: int) -> str:
     """Get rank name from rank_id"""
@@ -110,9 +136,10 @@ async def username_command(interaction: discord.Interaction, username: str):
         if not player:
             embed = discord.Embed(
                 title="❌ Player Not Found",
-                description=f"No player found with username `{username}`",
+                description=f"No player found with username `{username}`\n\n**Tips:**\n• Make sure the username is spelled correctly\n• Try using their exact username (case-sensitive)\n• The player might have changed their name recently\n• Wait a few seconds and try again",
                 color=discord.Color.red()
             )
+            embed.set_footer(text="If the problem persists, the API might be experiencing issues")
             await interaction.followup.send(embed=embed)
             return
         
@@ -136,7 +163,7 @@ async def usernamehistory_command(interaction: discord.Interaction, username: st
         if not player:
             embed = discord.Embed(
                 title="❌ Player Not Found",
-                description=f"No player found with username `{username}`",
+                description=f"No player found with username `{username}`\n\n**Tips:**\n• Make sure the username is spelled correctly\n• Try using their exact username (case-sensitive)\n• The player might have changed their name recently",
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed)
@@ -155,15 +182,13 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
         color=discord.Color.blue()
     )
     
-    # Skin image as thumbnail
+    # Skin image 
     if player.get('skinInformation') and player['skinInformation'].get('IconUrl'):
         embed.set_thumbnail(url=player['skinInformation']['IconUrl'])
     
     description = []
     
-    # Header with gray opacity using code block
-    
-    # ID with L-shape (using code block for gray effect)
+
     user_id = player.get('userId', 'N/A')
      
     description.append(f"*ID*")
@@ -171,7 +196,7 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
      
       
     
-    # Username with L-shape
+   
      
     description.append(f"*Username*")
     description.append(f"  └─ {player_name}")
@@ -296,6 +321,7 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     return embed
+
 async def create_history_embed(player: Dict) -> discord.Embed:
     """Create embed with ONLY username history (shows as many as possible)"""
     
@@ -422,5 +448,3 @@ def run_web():
 Thread(target=run_web, daemon=True).start()
 
 bot.run(DISCORD_TOKEN)
-    
-
