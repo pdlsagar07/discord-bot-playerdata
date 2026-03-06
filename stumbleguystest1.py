@@ -27,21 +27,20 @@ class StumbleLabsAPI:
         })
     
     def search_by_username(self, username: str, retry_count: int = 2) -> Optional[Dict]:
-        """Search for a player by username with retry logic"""
-       
-        original_username = username
-        username = username.strip('"\' ').replace('"', '').replace("'", "")
+        """Search for a player by username  - preserves exact username with symbols"""
         
-        # Try different variations if needed
+        # Only trim whitespace - keep all symbols
+        username = username.strip()
+        
+        # Try exact username first, then variations as fallback
         search_attempts = [
-            username,  
-            username.lower(),  # Lowercase
-            username.title(),  # Title case
-            username.upper(),  # Uppercase
-            username.replace(" ", ""),  # No spaces
+            username,  # Exact username
+            username.lower(),  # Lowercase fallback
+            username.title(),  # Title case fallback
+            username.upper(),  # Uppercase fallback
         ]
         
-        # Remove duplicates 
+        # Remove duplicates but keep order
         seen = set()
         search_attempts = [x for x in search_attempts if not (x in seen or seen.add(x))]
         
@@ -62,8 +61,56 @@ class StumbleLabsAPI:
                     elif response.status_code == 429:
                         time.sleep(2)
                     
-                except:
+                except Exception as e:
+                    print(f"Search attempt failed for {attempt_username}: {e}")
                     pass
+            
+            if attempt_num < retry_count:
+                time.sleep(1)
+        
+        return None
+    
+    def search_by_user_id(self, user_id: str, retry_count: int = 2) -> Optional[Dict]:
+        """Search for a player by user ID"""
+        
+        # Clean the user ID - remove any quotes and trim whitespace
+        user_id = user_id.strip().strip('"\'')
+        
+        for attempt_num in range(retry_count + 1):
+            try:
+                # Try direct fetch by ID first (most efficient)
+                response = self.session.get(
+                    f"{self.base_url}/users/{user_id}",
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('success') and data.get('data'):
+                        return data.get('data')
+                
+                # If direct fetch fails, try searching with ID as username (fallback)
+                elif response.status_code == 404:
+                    search_response = self.session.post(
+                        f"{self.base_url}/users/search",
+                        json={"username": user_id},
+                        timeout=10
+                    )
+                    
+                    if search_response.status_code == 200:
+                        search_data = search_response.json()
+                        if search_data.get('success') and search_data.get('data'):
+                            # Verify that the returned user has matching ID
+                            player_data = search_data.get('data')
+                            if player_data.get('userId') == user_id:
+                                return player_data
+                
+                elif response.status_code == 429:
+                    time.sleep(2)
+                
+            except Exception as e:
+                print(f"Search by ID failed for {user_id}: {e}")
+                pass
             
             if attempt_num < retry_count:
                 time.sleep(1)
@@ -136,7 +183,7 @@ async def username_command(interaction: discord.Interaction, username: str):
         if not player:
             embed = discord.Embed(
                 title="❌ Player Not Found",
-                description=f"No player found with username `{username}`\n\n**Tips:**\n• Make sure the username is spelled correctly\n• Try using their exact username (case-sensitive)\n• The player might have changed their name recently\n• Wait a few seconds and try again",
+                description=f"No player found with username `{username}`\n\n**Tips:**\n• Make sure the username is spelled correctly\n• Wait a few seconds and try again",
                 color=discord.Color.red()
             )
             embed.set_footer(text="If the problem persists, the API might be experiencing issues")
@@ -146,8 +193,8 @@ async def username_command(interaction: discord.Interaction, username: str):
         embed = await create_player_embed(player, username, interaction)
         await interaction.followup.send(embed=embed)
 
-#COMMAND 2: /usernamehistory - Shows ONLY username history 
-@bot.tree.command(name="usernamehistory", description="view username history")
+# COMMAND 2: /usernamehistory - Shows ONLY username history 
+@bot.tree.command(name="usernamehistory", description="View username history")
 @app_commands.describe(username="The Stumble Guys username to check history for")
 @app_commands.guild_only()
 async def usernamehistory_command(interaction: discord.Interaction, username: str):
@@ -171,6 +218,33 @@ async def usernamehistory_command(interaction: discord.Interaction, username: st
         
         embed = await create_history_embed(player)
         await interaction.followup.send(embed=embed)
+
+# COMMAND 3: /userid - Search by user ID
+@bot.tree.command(name="userid", description="Get Stumble Guys player data by user ID")
+@app_commands.describe(user_id="The Stumble Guys user ID to search for")
+@app_commands.guild_only()
+async def userid_command(interaction: discord.Interaction, user_id: str):
+    if interaction.guild is None:
+        await interaction.response.send_message("❌ This command can only be used in servers!", ephemeral=True)
+        return
+    
+    await interaction.response.defer()
+    
+    async with interaction.channel.typing():
+        player = bot.api.search_by_user_id(user_id)
+        
+        if not player:
+            embed = discord.Embed(
+                title="❌ Player Not Found",
+                description=f"No player found with user ID `{user_id}`\n\n**Tips:**\n• Make sure the user ID is correct\n• User IDs are usually numeric\n• The player might have changed their ID recently",
+                color=discord.Color.red()
+            )
+            embed.set_footer(text="If the problem persists, the API might be experiencing issues")
+            await interaction.followup.send(embed=embed)
+            return
+        
+        embed = await create_player_embed(player, f"ID: {user_id}", interaction)
+        await interaction.followup.send(embed=embed)
  
 async def create_player_embed(player: Dict, searched_username: str, interaction: discord.Interaction) -> discord.Embed:
     """Create embed with L-shaped symbols and gray opacity effect"""
@@ -188,21 +262,14 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
     
     description = []
     
-
     user_id = player.get('userId', 'N/A')
      
     description.append(f"*ID*")
     description.append(f" └─ {user_id}")
      
-      
-    
-   
-     
     description.append(f"*Username*")
     description.append(f"  └─ {player_name}")
      
-      
-    
     # Country with flag
     country = player.get('country', 'Unknown')
     flag_map = {
@@ -216,24 +283,18 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
     description.append(f"*Country*")
     description.append(f"  └─ {flag}")
      
-      
-    
     # Trophies
     trophies = player.get('trophies', 0)
      
     description.append(f"*Trophies*")
     description.append(f"  └─ {trophies:,} 🏅")
      
-      
-    
     # Crowns
     crowns = player.get('crowns', 0)
      
     description.append(f"*crowns*")
     description.append(f"  └─ {crowns:,} 🏆")
      
-      
-    
     # Skin
     if player.get('skinInformation'):
         skin = player['skinInformation'].get('FriendlyName', 'Unknown')
@@ -243,23 +304,17 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
     description.append(f"*Skin*")
     description.append(f"  └─ {skin}")
      
-      
-    
     # Experience and Level
     exp = player.get('experience', 0)
     description.append(f"*Experience*")
     description.append(f"  └─{exp:,} ")
      
-      
-    
     # Online status
     status = ":green_circle:" if player.get('isOnline') else ":red_circle:"
      
     description.append(f"*Online*")
     description.append(f"  └─ {status}")
      
-      
-    
     # Rank info
     if player.get('ranked'):
         rank = player['ranked']
@@ -270,8 +325,6 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
         description.append(f"*Rank*")
         description.append(f"  └─ {rank_name} ({season})")
          
-          
-    
     # Clan if exists
     if player.get('clan'):
         clan = player['clan']
@@ -281,11 +334,9 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
         description.append(f"*Clan*")
         description.append(f"    └─ {clan_name} [{clan_tag}]")
          
-          
-    
     embed.description = "\n".join(description)
     
-    # Username history with L-shapes and gray opacity
+    # Username history 
     if player.get('usernameHistory') and len(player['usernameHistory']) > 1:
         history = player.get('usernameHistory', [])
         recent_history = history[-5:] if len(history) > 5 else history
@@ -309,8 +360,6 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
         
         if len(history) > 5:
             history_lines.append(f"... and more")
-        
-        
         
         embed.add_field(
             name="", 
