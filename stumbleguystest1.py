@@ -118,33 +118,30 @@ class StumbleLabsAPI:
         return None
     
     #not sure if this ranked system works: 
-def get_rank_info(rank_id: int) -> str:
-    """Get rank name from rank_id"""
-    rank_mapping = {
-        0: "Wood I",
-        1: "Wood II",
-        2: "Wood III",
-        3: "Bronze I",
-        4: "Bronze II",
-        5: "Bronze III",
-        6: "Silver I",
-        7: "Silver II",
-        8: "Silver III",
-        9: "Gold I",
-        10: "Gold II",
-        11: "Gold III",
-        12: "Platinum I",
-        13: "Platinum II",
-        14: "Platinum III",
-        15: "Master I",
-        16: "Master II",
-        17: "Master III",
-        18: "Champion I",
-        19: "Champion II",
-        20: "Champion III"
+def get_rank_info(tier_id: int, division_id: int | None = None) -> str:
+    tiers = {
+        0: "Unranked",
+        1: "Wood",
+        2: "Bronze",
+        3: "Silver",
+        4: "Gold",
+        5: "Platinum",
+        6: "Master",
+        7: "Champion"
     }
-    
-    return rank_mapping.get(rank_id, "Unknown")
+
+    tier = tiers.get(tier_id, "Unknown")
+
+    if tier in ["Unranked", "Champion"] or division_id is None:
+        return tier
+
+    divisions = {
+        1: "I",
+        2: "II",
+        3: "III"
+    }
+
+    return f"{tier} {divisions.get(division_id, '')}".strip()
 
 def format_season(season_str: str) -> str:
     """Convert 'LIVE_RANKED_SEASON_19' to 'S19'"""
@@ -273,11 +270,47 @@ async def create_player_embed(player: Dict, searched_username: str, interaction:
     # Country with flag
     country = player.get('country', 'Unknown')
     flag_map = {
-        'US': '🇺🇸', 'GB': '🇬🇧', 'NP': '🇳🇵', 'IN': '🇮🇳',
-        'BR': '🇧🇷', 'DE': '🇩🇪', 'FR': '🇫🇷', 'JP': '🇯🇵',
-        'KR': '🇰🇷', 'CN': '🇨🇳', 'RU': '🇷🇺', 'CA': '🇨🇦',
-        'AU': '🇦🇺', 'MX': '🇲🇽', 'ES': '🇪🇸', 'IT': '🇮🇹'
-    }
+    'AF': '🇦🇫', 'AL': '🇦🇱', 'DZ': '🇩🇿', 'AS': '🇦🇸', 'AD': '🇦🇩',
+    'AO': '🇦🇴', 'AI': '🇦🇮', 'AQ': '🇦🇶', 'AG': '🇦🇬', 'AR': '🇦🇷',
+    'AM': '🇦🇲', 'AW': '🇦🇼', 'AU': '🇦🇺', 'AT': '🇦🇹', 'AZ': '🇦🇿',
+    'BS': '🇧🇸', 'BH': '🇧🇭', 'BD': '🇧🇩', 'BB': '🇧🇧', 'BY': '🇧🇾',
+    'BE': '🇧🇪', 'BZ': '🇧🇿', 'BJ': '🇧🇯', 'BM': '🇧🇲', 'BT': '🇧🇹',
+    'BO': '🇧🇴', 'BA': '🇧🇦', 'BW': '🇧🇼', 'BR': '🇧🇷', 'BN': '🇧🇳',
+    'BG': '🇧🇬', 'BF': '🇧🇫', 'BI': '🇧🇮', 'KH': '🇰🇭', 'CM': '🇨🇲',
+    'CA': '🇨🇦', 'CV': '🇨🇻', 'CF': '🇨🇫', 'TD': '🇹🇩', 'CL': '🇨🇱',
+    'CN': '🇨🇳', 'CO': '🇨🇴', 'KM': '🇰🇲', 'CG': '🇨🇬', 'CD': '🇨🇩',
+    'CR': '🇨🇷', 'CI': '🇨🇮', 'HR': '🇭🇷', 'CU': '🇨🇺', 'CY': '🇨🇾',
+    'CZ': '🇨🇿', 'DK': '🇩🇰', 'DJ': '🇩🇯', 'DM': '🇩🇲', 'DO': '🇩🇴',
+    'EC': '🇪🇨', 'EG': '🇪🇬', 'SV': '🇸🇻', 'GQ': '🇬🇶', 'ER': '🇪🇷',
+    'EE': '🇪🇪', 'SZ': '🇸🇿', 'ET': '🇪🇹', 'FJ': '🇫🇯', 'FI': '🇫🇮',
+    'FR': '🇫🇷', 'GA': '🇬🇦', 'GM': '🇬🇲', 'GE': '🇬🇪', 'DE': '🇩🇪',
+    'GH': '🇬🇭', 'GR': '🇬🇷', 'GD': '🇬🇩', 'GT': '🇬🇹', 'GN': '🇬🇳',
+    'GW': '🇬🇼', 'GY': '🇬🇾', 'HT': '🇭🇹', 'HN': '🇭🇳', 'HU': '🇭🇺',
+    'IS': '🇮🇸', 'IN': '🇮🇳', 'ID': '🇮🇩', 'IR': '🇮🇷', 'IQ': '🇮🇶',
+    'IE': '🇮🇪', 'IL': '🇮🇱', 'IT': '🇮🇹', 'JM': '🇯🇲', 'JP': '🇯🇵',
+    'JO': '🇯🇴', 'KZ': '🇰🇿', 'KE': '🇰🇪', 'KI': '🇰🇮', 'KP': '🇰🇵',
+    'KR': '🇰🇷', 'KW': '🇰🇼', 'KG': '🇰🇬', 'LA': '🇱🇦', 'LV': '🇱🇻',
+    'LB': '🇱🇧', 'LS': '🇱🇸', 'LR': '🇱🇷', 'LY': '🇱🇾', 'LI': '🇱🇮',
+    'LT': '🇱🇹', 'LU': '🇱🇺', 'MG': '🇲🇬', 'MW': '🇲🇼', 'MY': '🇲🇾',
+    'MV': '🇲🇻', 'ML': '🇲🇱', 'MT': '🇲🇹', 'MH': '🇲🇭', 'MR': '🇲🇷',
+    'MU': '🇲🇺', 'MX': '🇲🇽', 'FM': '🇫🇲', 'MD': '🇲🇩', 'MC': '🇲🇨',
+    'MN': '🇲🇳', 'ME': '🇲🇪', 'MA': '🇲🇦', 'MZ': '🇲🇿', 'MM': '🇲🇲',
+    'NA': '🇳🇦', 'NR': '🇳🇷', 'NP': '🇳🇵', 'NL': '🇳🇱', 'NZ': '🇳🇿',
+    'NI': '🇳🇮', 'NE': '🇳🇪', 'NG': '🇳🇬', 'NO': '🇳🇴', 'OM': '🇴🇲',
+    'PK': '🇵🇰', 'PW': '🇵🇼', 'PA': '🇵🇦', 'PG': '🇵🇬', 'PY': '🇵🇾',
+    'PE': '🇵🇪', 'PH': '🇵🇭', 'PL': '🇵🇱', 'PT': '🇵🇹', 'QA': '🇶🇦',
+    'RO': '🇷🇴', 'RU': '🇷🇺', 'RW': '🇷🇼', 'KN': '🇰🇳', 'LC': '🇱🇨',
+    'VC': '🇻🇨', 'WS': '🇼🇸', 'SM': '🇸🇲', 'ST': '🇸🇹', 'SA': '🇸🇦',
+    'SN': '🇸🇳', 'RS': '🇷🇸', 'SC': '🇸🇨', 'SL': '🇸🇱', 'SG': '🇸🇬',
+    'SK': '🇸🇰', 'SI': '🇸🇮', 'SB': '🇸🇧', 'SO': '🇸🇴', 'ZA': '🇿🇦',
+    'SS': '🇸🇸', 'ES': '🇪🇸', 'LK': '🇱🇰', 'SD': '🇸🇩', 'SR': '🇸🇷',
+    'SE': '🇸🇪', 'CH': '🇨🇭', 'SY': '🇸🇾', 'TW': '🇹🇼', 'TJ': '🇹🇯',
+    'TZ': '🇹🇿', 'TH': '🇹🇭', 'TL': '🇹🇱', 'TG': '🇹🇬', 'TO': '🇹🇴',
+    'TT': '🇹🇹', 'TN': '🇹🇳', 'TR': '🇹🇷', 'TM': '🇹🇲', 'UG': '🇺🇬',
+    'UA': '🇺🇦', 'AE': '🇦🇪', 'GB': '🇬🇧', 'US': '🇺🇸', 'UY': '🇺🇾',
+    'UZ': '🇺🇿', 'VU': '🇻🇺', 'VE': '🇻🇪', 'VN': '🇻🇳', 'YE': '🇾🇪',
+    'ZM': '🇿🇲', 'ZW': '🇿🇼'
+}
     flag = flag_map.get(country, '🌐')
      
     description.append(f"*Country*")
